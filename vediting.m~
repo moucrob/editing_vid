@@ -4,9 +4,12 @@ clc
 
 %% inputs :
 videoFileName = 'testvid.mp4';
+videoFileName2 = [videoFileName(1:end-4),'Reduced.mp4'];
 
 %% temporary folder
 workingDir = 'tempFolder';
+allFramesDir = 'allFrames';
+movesFramesDir = 'movesFrames';
 
 if exist(workingDir, 'dir')
 	warningMessage = sprintf('The %s folder already exists! Press ok for deleting, or cancel.', workingDir);
@@ -15,42 +18,87 @@ if exist(workingDir, 'dir')
 end
 
 mkdir(workingDir)
-mkdir(workingDir,'images')
+mkdir(workingDir,allFramesDir)
+mkdir(workingDir,movesFramesDir)
 
-%% Convert the vid in a bunch of frame images
-shuttleVideo = VideoReader(videoFileName);
+%% Remove the duplicate frames, as OCR will take a hell lot of time
+if ~exist(videoFileName2,'file')
+  command = sprintf(['ffmpeg -i %s', ...
+                     ' -vf mpdecimate,setpts=N/FRAME_RATE/TB', ...
+                     ' %s'], videoFileName, videoFileName2)
+  [status,cmdout] = system(command)
+end
+
+%% Convert the vid in a bunch of frame allFrames
+shuttleVideo = VideoReader(videoFileName2);
 k = 1;
 while hasFrame(shuttleVideo)
-	k = k+1; disp(['k = ',num2str(k)])
+	disp(['k = ',num2str(k)])
   
   img = readFrame(shuttleVideo);
   
   frameName = [sprintf('%07d',k) '.png'];
-  fullName = fullfile(workingDir,'images',frameName);
+  fullName = fullfile(workingDir,allFramesDir,frameName);
   imwrite(img,fullName, ...
-          'Quality',100,'BitDepth',16,'Compression','none','Mode','lossless')
+          'BitDepth',16,'Compression','none','Mode','lossless')
     
 % 	thisfig = figure() ; thisax = axes('Parent', thisfig);
 % 	image(this_frame, 'Parent', thisax);
 % 	title(thisax, sprintf('Frame #%d', k)) ;
 %   pause(2)
+
+  k = k+1; 
 end
 
 %% Convert the bunch into a cell array
-imageNames = dir(fullfile(workingDir,'images','*.png'));
+imageNames = dir(fullfile(workingDir,allFramesDir,'*.png'));
 imageNames = {imageNames.name}';
 
-disp(numel(imageNames)) %debug
+%% To perhaps do later: %TODO
+% Remove the frames containing "GreenRecorder" and all that do not contain
+% both "plan computation countdown" and "start/goal joint configuration"
+
+%% Remove the frames/queries where there is no move at all
+% See which frame contains "(metric)" or "%" and keep+name them accordingly
+% to the query
+pattern = "(metric)"; % "%" keeps definitely ONLY the frames containing the shell and doesn't recognize at all the move frames! Strange...
+m = 1;
+for j = 1:numel(imageNames)
+  disp(['j = ',num2str(j)])
+  img = imread( fullfile(workingDir,allFramesDir,imageNames{j}) );
+  tic
+  ocrResults = ocr(img);
+  t1 = toc ; disp(['OCR took ',num2str(t1),' sec'])
+  txtExtracted = ocrResults.Text; %1xN char array
+  disp(txtExtracted)
+  tic
+  idxOccur = strfind(string(txtExtracted),string(pattern));
+  disp(['idxOccur = ',num2str(idxOccur)])
+  t2 = toc ; disp(['String search took ',num2str(t2),' sec'])
+  if ~isempty(idxOccur) %keep the image
+    imgName = [sprintf('%07d',m) '.png']; m = m+1;
+    imwrite(img,fullfile(workingDir,movesFramesDir,imgName), ...
+            'BitDepth',16,'Compression','none','Mode','lossless')
+  end
+end
+
+%% Name the kept move-associated frames accordingly to the query+run
+
+
+%% Remove the dead times after the moves
+
 
 %% Create New Video with the Image Sequence
-outputVideo = VideoWriter(fullfile(workingDir,'shuttle_out.avi')); %no mp4 under linux :'(
-%https://www.mathworks.com/matlabcentral/answers/143051-how-to-write-a-mp4-video-using-vision-toolbox
-outputVideo.FrameRate = shuttleVideo.FrameRate;
-outputVideo.Quality = 100;
-
-open(outputVideo)
-for i = 1:length(imageNames)
-   img = imread(fullfile(workingDir,'images',imageNames{i}));
-   writeVideo(outputVideo,img)
-end
-close(outputVideo)
+% outputVideo = VideoWriter(fullfile(workingDir,'shuttle_out.avi')); %no mp4 under linux :'(
+% %https://www.mathworks.com/matlabcentral/answers/143051-how-to-write-a-mp4-video-using-vision-toolbox
+% outputVideo.FrameRate = shuttleVideo.FrameRate;
+% outputVideo.Quality = 100;
+% 
+% open(outputVideo)
+% for i = 1:length(imageNames)
+%   disp(['i = ',num2str(i)])
+% 	img = imread(fullfile(workingDir,allFramesDir,imageNames{i}));
+%   img=im2double(img); %otherwise IMG must be of one of the following classes: double, single, uint8
+% 	writeVideo(outputVideo,img)
+% end
+% close(outputVideo)
