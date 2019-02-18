@@ -1,58 +1,60 @@
-% https://www.mathworks.com/matlabcentral/answers/48797-how-to-extract-frames-of-a-video#answer_59652
-% https://www.mathworks.com/help/matlab/examples/convert-between-image-sequences-and-video.html
-clc
-
-%% inputs :
-videoFileName = 'testvid.mp4';
-videoFileName2 = [videoFileName(1:end-4),'Reduced.mp4'];
-
-%% temporary folder
-workingDir = 'tempFolder';
-allFramesDir = 'allFrames';
-movesFramesDir = 'movesFrames';
-
-if exist(workingDir, 'dir')
-	warningMessage = sprintf('The %s folder already exists! Press ok for deleting, or cancel.', workingDir);
-	uiwait(warndlg(warningMessage));
-  rmdir(workingDir, 's')
-end
-
-mkdir(workingDir)
-mkdir(workingDir,allFramesDir)
-mkdir(workingDir,movesFramesDir)
-
-%% Remove the duplicate frames, as OCR will take a hell lot of time
-if ~exist(videoFileName2,'file')
-  command = sprintf(['ffmpeg -i %s', ...
-                     ' -vf mpdecimate,setpts=N/FRAME_RATE/TB', ...
-                     ' %s'], videoFileName, videoFileName2)
-  [status,cmdout] = system(command)
-end
-
-%% Convert the vid in a bunch of frame allFrames
-shuttleVideo = VideoReader(videoFileName2);
-k = 1;
-while hasFrame(shuttleVideo)
-	disp(['k = ',num2str(k)])
-  
-  img = readFrame(shuttleVideo);
-  
-  frameName = [sprintf('%07d',k) '.png'];
-  fullName = fullfile(workingDir,allFramesDir,frameName);
-  imwrite(img,fullName, ...
-          'BitDepth',16,'Compression','none','Mode','lossless')
-    
-% 	thisfig = figure() ; thisax = axes('Parent', thisfig);
-% 	image(this_frame, 'Parent', thisax);
-% 	title(thisax, sprintf('Frame #%d', k)) ;
-%   pause(2)
-
-  k = k+1; 
-end
-
-%% Convert the bunch into a cell array
-imageNames = dir(fullfile(workingDir,allFramesDir,'*.png'));
-imageNames = {imageNames.name}';
+% % https://www.mathworks.com/matlabcentral/answers/48797-how-to-extract-frames-of-a-video#answer_59652
+% % https://www.mathworks.com/help/matlab/examples/convert-between-image-sequences-and-video.html
+% clc
+% 
+% %% inputs :
+% videoFileName = 'testvid.mp4';
+% videoFileName2 = [videoFileName(1:end-4),'Reduced.mp4'];
+% 
+% %% temporary folder
+% workingDir = 'tempFolder';
+% allFramesDir = 'allFrames';
+% movesFramesDir = 'movesFrames';
+% 
+% if exist(workingDir, 'dir')
+%   warningMessage = sprintf('The %s folder already exists! Press ok for deleting, or cancel.', workingDir);
+%   uiwait(warndlg(warningMessage));
+%   rmdir(workingDir, 's')
+% end
+% 
+% mkdir(workingDir)
+% mkdir(workingDir,allFramesDir)
+% mkdir(workingDir,movesFramesDir)
+% 
+% %% Remove the duplicate frames, as OCR will take a hell lot of time
+% % OCR takes 30sec when shell overlap the recording area SO BE CAREFUL
+% % 1.5sec otherwise when there is only RViz text
+% if ~exist(videoFileName2,'file')
+%   command = sprintf(['ffmpeg -i %s', ...
+%     ' -vf mpdecimate,setpts=N/FRAME_RATE/TB', ...
+%     ' %s'], videoFileName, videoFileName2)
+%   [status,cmdout] = system(command)
+% end
+% 
+% %% Convert the vid in a bunch of frame allFrames
+% shuttleVideo = VideoReader(videoFileName2);
+% k = 1;
+% while hasFrame(shuttleVideo)
+%   disp(['k = ',num2str(k)])
+%   
+%   img = readFrame(shuttleVideo);
+%   
+%   frameName = [sprintf('%07d',k) '.png'];
+%   fullName = fullfile(workingDir,allFramesDir,frameName);
+%   imwrite(img,fullName, ...
+%     'BitDepth',16,'Compression','none','Mode','lossless')
+%   
+%   % 	thisfig = figure() ; thisax = axes('Parent', thisfig);
+%   % 	image(this_frame, 'Parent', thisax);
+%   % 	title(thisax, sprintf('Frame #%d', k)) ;
+%   %   pause(2)
+%   
+%   k = k+1;
+% end
+% 
+% %% Convert the bunch into a cell array
+% imageNames = dir(fullfile(workingDir,allFramesDir,'*.png'));
+% imageNames = {imageNames.name}';
 
 %% To perhaps do later: %TODO
 % Remove the frames containing "GreenRecorder" and all that do not contain
@@ -61,7 +63,23 @@ imageNames = {imageNames.name}';
 %% Remove the frames/queries where there is no move at all
 % See which frame contains "(metric)" or "%" and keep+name them accordingly
 % to the query
-pattern = "(metric)"; % "%" keeps definitely ONLY the frames containing the shell and doesn't recognize at all the move frames! Strange...
+pattern = "vancy";
+% "%" keeps definitely ONLY the frames containing the shell and doesn't recognize at all the move frames! Strange...
+% "metrics" is always read "mama" by their algo unfortunately... see output
+% below:
+
+trainedLanguage = '/home/exs/editing_vid/myLang/tessdata/myLang.traineddata';
+%%%%%%%%%%%%% TO DO MANUALLY : FIND A FRAME CONTAINING THE VERSUS %%%%%%%%
+%%%%%%%%%%%%% IN ORDER TO SELECT THE REGION OF INTEREST %%%%%%%%%%%%%%%%%%
+biggestTextBoxStateFrame = '0000160.png';
+basicImage = imread(fullfile(workingDir,allFramesDir,biggestTextBoxStateFrame));
+figure
+imshow(basicImage);
+h = imrect;
+roi = wait(h);
+croppedImage = imcrop(basicImage, roi);
+figure; imshow(croppedImage);
+
 m = 1;
 for j = 1:numel(imageNames)
   disp(['j = ',num2str(j)])
@@ -69,8 +87,34 @@ for j = 1:numel(imageNames)
   tic
   ocrResults = ocr(img);
   t1 = toc ; disp(['OCR took ',num2str(t1),' sec'])
-  txtExtracted = ocrResults.Text; %1xN char array
-  disp(txtExtracted)
+  
+  disp(ocrResults.Text); %1xN char array
+  tic
+  ocrResults = ocr(img,'Language', trainedLanguage);
+  t3 = toc ; disp(['OCR took ',num2str(t3),' sec'])
+  disp(ocrResults.Text); %1xN char array
+  
+  tic
+  ocrResults = ocr(img,roi,'Language', trainedLanguage);
+  t4 = toc ; disp(['OCR took ',num2str(t4),' sec'])
+  disp(ocrResults.Text); %1xN char array
+  
+% % % ac:Ep|arIcE(t) 7 wt
+% % % tzm expeumem vephca)
+% % % re\evancy (mama) :
+% % % '1 r “ w m
+% % % Versus
+% % % 
+% % % plan campulallun cmmmawn T : monuuo sec
+% % % smnlgnm mm: conng-muons : Aquery 'RANnoM,pose35‘)
+% % % (vmm base Amp at the M50 [0 wnsl)
+% % % 71233330 / $157430 rad
+% % % .1 543350 1 .2 azsszau van
+% % % 0.175294 / —2.12327u van
+% % % .2 125950 / u eaasm rad
+% % % 0035732 / sasasoa rad
+% % % 1145450 / 4242129 ma
+  
   tic
   idxOccur = strfind(string(txtExtracted),string(pattern));
   disp(['idxOccur = ',num2str(idxOccur)])
