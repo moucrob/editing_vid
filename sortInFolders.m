@@ -10,6 +10,12 @@ clc
 % feel free to modify
 %%
 
+%%
+% TODO : Erase the several runs per latest subfolder, by keeping the highest
+% metric difference for the files in metric folderm, and best metric for the
+% files outside (optimal planners)
+%%
+
 pathRead = '/home/exs/Videos/vidsRRTC-RRTSunrestrOnlyMovements/'; %char array
 nameStore = 'iplanRvidsDatabase';
 path = fullfile(pathRead,'..',nameStore);
@@ -33,15 +39,17 @@ for i=1:numel(fileNames)
    stru.countdown = str2num(countdownChar(10:end));
    queryChar = splittedCellArray{3};
    stru.query = str2num(queryChar(12:end));
-   stru.planner =  splittedCellArray{4};
-   stru.metric =  splittedCellArray{5};
-   if numel(splittedCellArray) == 6
-       runChar = splittedCellArray{6};
-       stru.run = str2num(runChar(5:end-4));
-   else %numel(splittedCellArray) == 7
-       acceptanceChar = splittedCellArray{6};
-       stru.acceptance = acceptanceChar(12:end);
+   stru.planner = splittedCellArray{4};
+   stru.metric = splittedCellArray{5};
+   metricValueChar = splittedCellArray{6};
+   stru.value = str2num(metricValueChar(8:end));
+   if numel(splittedCellArray) == 7
        runChar = splittedCellArray{7};
+       stru.run = str2num(runChar(5:end-4));
+   else %numel(splittedCellArray) == 8
+       acceptanceChar = splittedCellArray{7};
+       stru.acceptance = acceptanceChar(12:end);
+       runChar = splittedCellArray{8};
        stru.run = str2num(runChar(5:end-4));
    end
    
